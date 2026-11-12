@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#102a3e">
+  <meta name="description" content="تجربة CircuitAR التعليمية: تركيب أسلاك دائرة كهربائية في الواقع المعزز">
+  <title>CircuitAR — مختبر الدائرة الكهربائية AR</title>
+  <!-- This product includes the XR Engine software developed by Niantic Spatial, Inc.
+       Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
+       License: https://github.com/8thwall/engine/blob/main/LICENSE -->
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <canvas id="camerafeed" aria-label="مشهد الواقع المعزز"></canvas>
+  <header class="topbar">
+    <div class="brand"><span class="bolt">⚡</span><span><b>CircuitAR</b><small>مختبر الدائرة الكهربائية</small></span></div>
+    <button id="helpBtn" class="circleBtn" aria-label="عرض التعليمات">؟</button>
+  </header>
+  <div id="tracking" class="tracking" role="status">جارٍ تجهيز الكاميرا...</div>
+  <div id="crosshair" class="crosshair" aria-hidden="true"></div>
+  <section id="startPanel" class="panel start-panel">
+    <span class="kicker">تجربة واقع معزز حقيقية • دون بطاقات</span>
+    <h1>ركّب الدائرة بيدك</h1>
+    <p>وجّه الكاميرا نحو سطح مستوٍ ذي تفاصيل واضحة، ثم ضع الدائرة واسحب أطراف الأسلاك الملونة لتوصيل البطارية والمفتاح والمصباح.</p>
+    <p class="fine">يحتاج إلى كاميرا ومتصفح متوافق واتصال بالإنترنت، ويعمل فقط عند فتحه من رابط HTTPS.</p>
+    <button id="startBtn" class="primary" disabled>جارٍ تحميل محرك AR...</button>
+    <span class="small" id="loadStatus">تحميل المحرك...</span>
+  </section>
+  <section id="controls" class="controls hidden" aria-label="التحكم بالتجربة">
+    <div id="message" class="message" role="status">وجّه الجهاز نحو سطح مناسب، ثم اضغط «وضع الدائرة».</div>
+    <div class="meter"><span id="connections">الأسلاك: 0 / 3</span><span id="lampState">المصباح مطفأ</span></div>
+    <div class="buttons">
+      <button id="placeBtn" class="primary">وضع الدائرة</button>
+      <button id="resetBtn" class="secondary">إعادة الأسلاك</button>
+      <button id="moveBtn" class="secondary">تغيير الموضع</button>
+    </div>
+    <div class="height-row"><span>ضبط ارتفاع اللوحة عن السطح:</span><button id="raiseBtn" class="heightBtn">+ رفع</button><button id="lowerBtn" class="heightBtn">− خفض</button></div>
+  </section>
+  <section id="helpPanel" class="panel help-panel hidden" role="dialog" aria-label="التعليمات">
+    <h2>كيف توصل الأسلاك؟</h2>
+    <ol>
+      <li>وجّه الكاميرا نحو سطح مستوٍ ذي تفاصيل واضحة، واضغط «وضع الدائرة».</li>
+      <li>اسحب الطرف الكروي لأي سلك إلى نقطة التوصيل الدائرية المراد ربطها.</li>
+      <li>كرّر العملية مع الطرف الثاني. ويمكنك أيضًا لمس الطرف ثم لمس منفذ التوصيل.</li>
+      <li>أكمل التوصيلات: <strong>موجب البطارية ← المفتاح ← المصباح ← سالب البطارية</strong>.</li>
+      <li>اضغط المفتاح لإغلاقه. سيضيء المصباح فقط عند صحة جميع التوصيلات.</li>
+    </ol>
+    <p class="fine">هذه محاكاة تعليمية افتراضية، وليست تعليمات للتعامل مع الكهرباء المنزلية.</p>
+    <button id="closeHelpBtn" class="primary">فهمت</button>
+  </section>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
