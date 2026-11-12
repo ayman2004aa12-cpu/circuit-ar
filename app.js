@@ -231,24 +231,38 @@ function onPointerUp(e){
 }
 function placementPoint(){
   if(!state.camera)return null;
-  // 8th Wall World Effects estimates a single horizontal y=0 plane.
-  const ray = new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(0,-.04),state.camera);
-  const surface=new THREE.Plane(new THREE.Vector3(0,1,0),-state.height);
-  const hit=ray.ray.intersectPlane(surface,new THREE.Vector3());
-  if(!hit || hit.distanceTo(state.camera.position)>4.5)return null;
-  return hit;
+  // Use the world-tracked horizontal reference plane when the view intersects it.
+  const ray=new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(0,-.12),state.camera);
+  const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-state.height);
+  const hit=ray.ray.intersectPlane(plane,new THREE.Vector3());
+  if(hit && hit.distanceTo(state.camera.position)>.20 && hit.distanceTo(state.camera.position)<4.5)return hit;
+  // Fallback: place in front of the camera, projected onto the reference plane.
+  // This is NOT a detected table; the height controls let the user align it.
+  const forward=new THREE.Vector3(0,0,-1).applyQuaternion(state.camera.quaternion);
+  forward.y=0;
+  if(forward.lengthSq()<.0001)forward.set(0,0,-1);
+  forward.normalize();
+  return state.camera.position.clone().addScaledVector(forward,1.0).setY(state.height);
 }
 function placeBoard(){
-  if(!state.board){status('لم يبدأ محرك AR بعد.');return;}
-  const point=placementPoint();
-  if(!point){status('وجّه الكاميرا نحو السطح بزاوية مائلة، ثم أعد المحاولة.');return;}
-  state.board.position.copy(point);
-  // Face the board toward the camera; maintain level with horizontal surface.
-  const dir = state.camera.position.clone().sub(point);
-  state.board.rotation.y=Math.atan2(dir.x,dir.z);
-  state.board.visible=true;state.placed=true;
-  $('crosshair').classList.add('hidden');$('placeBtn').classList.add('hidden');
-  status('ثُبّتت الدائرة في العالم الحقيقي. ابدأ بتوصيل الأسلاك.');
+  try{
+    if(!state.board||!state.camera){status('المشهد ثلاثي الأبعاد غير جاهز بعد. انتظر ظهور الكاميرا ثم حاول مجددًا.');return;}
+    const point=placementPoint();
+    if(!point){status('تعذر تحديد موضع الدائرة. حرّك الجهاز ثم أعد المحاولة.');return;}
+    state.board.position.copy(point);
+    const dir=state.camera.position.clone().sub(point);
+    state.board.rotation.y=Math.atan2(dir.x,dir.z);
+    state.board.visible=true;
+    state.placed=true;
+    state.board.updateMatrixWorld(true);
+    $('crosshair').classList.add('hidden');
+    $('placeBtn').classList.add('hidden');
+    status('تم وضع الدائرة. إذا لم تظهر، حرّك الجهاز ببطء واضبط الارتفاع باستخدام + و−.');
+  }catch(err){
+    console.error('CircuitAR placement error',err);
+    status('خطأ عند وضع الدائرة: '+(err?.message||String(err)));
+  }
 }
 function animateAr(time){
   if(!state.board||!state.placed)return;
