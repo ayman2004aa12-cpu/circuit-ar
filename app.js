@@ -12,7 +12,7 @@ const state = {
   scene: null, camera: null, renderer: null, board: null, selected: null,
   pointer: null, switchClosed: false, lamp: null, switchLever: null, arrowMeshes: [],
   ports: new Map(), raycaster: new THREE.Raycaster(), interactive: [],
-  wires: [], lastTick: 0,
+  wires: [], lastTick: 0, probe: null, lastDebug: 0,
 };
 const WHITE = 0xe8f3fc, NAVY = 0x173449, CYAN = 0x35c9d0, GOLD = 0xffc66c;
 const material = (color, extra={}) => new THREE.MeshStandardMaterial({color, roughness:.38, metalness:.16, ...extra});
@@ -38,7 +38,11 @@ const wireInitial = [
   [{x:.175,z:.305},{x:.335,z:.305}],
 ];
 
-function status(message) { $('message').textContent = message; }
+function status(message) { $('message').textContent = message; debugNote(message); }
+function debugNote(text){
+  const el=$('arDebug'); if(el) el.textContent='CircuitAR • '+text;
+}
+window.addEventListener('unhandledrejection',e=>debugNote('خطأ تحميل: '+(e.reason?.message||String(e.reason))));
 function sphere(radius, mat, segments=18) { return new THREE.Mesh(new THREE.SphereGeometry(radius, segments, 12), mat); }
 function box(w,h,d,mat) { return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); }
 function cylinder(r1,r2,h,mat,segments=24) { return new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segments),mat); }
@@ -231,37 +235,41 @@ function onPointerUp(e){
 }
 function placementPoint(){
   if(!state.camera)return null;
-  // Use the world-tracked horizontal reference plane when the view intersects it.
+  state.camera.updateMatrixWorld(true);
   const ray=new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2(0,-.12),state.camera);
   const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-state.height);
   const hit=ray.ray.intersectPlane(plane,new THREE.Vector3());
-  if(hit && hit.distanceTo(state.camera.position)>.20 && hit.distanceTo(state.camera.position)<4.5)return hit;
-  // Fallback: place in front of the camera, projected onto the reference plane.
-  // This is NOT a detected table; the height controls let the user align it.
-  const forward=new THREE.Vector3(0,0,-1).applyQuaternion(state.camera.quaternion);
-  forward.y=0;
-  if(forward.lengthSq()<.0001)forward.set(0,0,-1);
-  forward.normalize();
-  return state.camera.position.clone().addScaledVector(forward,1.0).setY(state.height);
+  if(hit && hit.distanceTo(state.camera.position)>.25 && hit.distanceTo(state.camera.position)<3.8) {
+    return {point:hit, grounded:true};
+  }
+  // Diagnostic fallback: appears ahead of the viewer but is NOT a recognized surface.
+  const forward=new THREE.Vector3();state.camera.getWorldDirection(forward);
+  const point=state.camera.position.clone().addScaledVector(forward,1.15);
+  point.y-=.23;
+  return {point, grounded:false};
 }
 function placeBoard(){
   try{
-    if(!state.board||!state.camera){status('المشهد ثلاثي الأبعاد غير جاهز بعد. انتظر ظهور الكاميرا ثم حاول مجددًا.');return;}
-    const point=placementPoint();
-    if(!point){status('تعذر تحديد موضع الدائرة. حرّك الجهاز ثم أعد المحاولة.');return;}
-    state.board.position.copy(point);
-    const dir=state.camera.position.clone().sub(point);
-    state.board.rotation.y=Math.atan2(dir.x,dir.z);
-    state.board.visible=true;
-    state.placed=true;
+    if(!state.board||!state.camera){
+      status('الكاميرا تعمل، لكن مشهد Three.js غير جاهز. افتح الملف التشخيصي.');return;
+    }
+    const hit=placementPoint();
+    if(!hit) {status('تعذر حساب موضع المجسم.');return;}
+    state.board.position.copy(hit.point);
+    const dir=state.camera.position.clone().sub(hit.point);
+    state.board.rotation.set(hit.grounded?0:-.34,Math.atan2(dir.x,dir.z),0,'YXZ');
+    state.board.visible=true;state.placed=true;
     state.board.updateMatrixWorld(true);
+    if(state.probe)state.probe.visible=false;
     $('crosshair').classList.add('hidden');
     $('placeBtn').classList.add('hidden');
-    status('تم وضع الدائرة. إذا لم تظهر، حرّك الجهاز ببطء واضبط الارتفاع باستخدام + و−.');
+    status(hit.grounded?
+      'تم وضع الدائرة على المستوى المتتبع. اسحب أطراف الأسلاك.':
+      'أظهرت الدائرة مؤقتًا أمام الكاميرا. هذا وضع اختباري وليس اكتشافًا للطاولة.');
   }catch(err){
     console.error('CircuitAR placement error',err);
-    status('خطأ عند وضع الدائرة: '+(err?.message||String(err)));
+    status('خطأ وضع الدائرة: '+(err?.message||String(err)));
   }
 }
 function animateAr(time){
@@ -282,6 +290,7 @@ function initializeScenePipeline(){
   return {
     name:'circuitar-scene',
     onStart: ({canvas:arCanvas})=>{
+      debugNote('الكاميرا بدأت. جارٍ تهيئة مشهد Three.js...');
       const {scene,camera,renderer}=XR8.Threejs.xrScene();
       state.scene=scene;state.camera=camera;state.renderer=renderer;
       renderer.shadowMap.enabled=true;
@@ -289,8 +298,15 @@ function initializeScenePipeline(){
       const light = new THREE.DirectionalLight(0xffffff,2.0);light.position.set(2,5,3);scene.add(light);
       // Official 8th Wall sample uses an elevated starting camera position.
       camera.position.set(0,1.6,0);
-      XR8.XrController.updateCameraProjectionMatrix({origin:camera.position,facing:camera.quaternion});
+      try { XR8.XrController.updateCameraProjectionMatrix({origin:camera.position,facing:camera.quaternion}); }
+      catch(err) { console.warn('Projection update not available:',err);debugNote('تنبيه إسقاط الكاميرا: '+err.message); }
       createBoard(scene);
+      // Visible neon cube proves whether the 8th Wall Three.js scene is rendered.
+      const probeMat = new THREE.MeshBasicMaterial({color:0x00ff66,depthTest:false});
+      state.probe = new THREE.Mesh(new THREE.BoxGeometry(.16,.16,.16),probeMat);
+      state.probe.renderOrder=1000;
+      scene.add(state.probe);
+      debugNote('المشهد جاهز؛ ابحث عن مكعب أخضر صغير أمام الكاميرا.');
       state.tracking='INITIALIZING';
       $('tracking').textContent='حرّك الجهاز ببطء ليتعرف على السطح';
       status('وجّه الكاميرا نحو سطح واحد واضح، ثم اضغط «وضع الدائرة».');
@@ -305,7 +321,17 @@ function initializeScenePipeline(){
       });
     },
     onUpdate: ({processCpuResult})=>{
+      if(state.probe&&state.camera&&!state.placed){
+        state.camera.updateMatrixWorld(true);
+        const forward=new THREE.Vector3(); state.camera.getWorldDirection(forward);
+        state.probe.position.copy(state.camera.position).addScaledVector(forward,1.0);
+        state.probe.rotation.y+=.02;
+      }
       const reality=processCpuResult?.reality;
+      if(performance.now()-state.lastDebug>4500){
+        state.lastDebug=performance.now();
+        if(!state.placed)debugNote('AR: '+(state.tracking||'?')+' • المكعب الأخضر اختبار عرض المجسمات • اضغط وضع الدائرة');
+      }
       if(reality?.trackingStatus==='NORMAL'){
         state.tracking='NORMAL';$('tracking').textContent='✓ التتبع مستقر';
       }
@@ -316,6 +342,7 @@ function initializeScenePipeline(){
 function onXRReady(){
   state.xrReady=true;
   $('startBtn').disabled=false;$('startBtn').textContent='فتح تجربة الواقع المعزز';
+  debugNote('المحرك جاهز.');
   $('loadStatus').textContent='المحرك جاهز — شغّل الكاميرا.';
 }
 // 8th Wall dispatches xrloaded once the engine script is ready.
@@ -360,4 +387,4 @@ function adjustHeight(delta){
 }
 $('helpBtn').addEventListener('click',()=> $('helpPanel').classList.remove('hidden'));
 $('closeHelpBtn').addEventListener('click',()=> $('helpPanel').classList.add('hidden'));
-window.addEventListener('error',e=>{console.error('CircuitAR error',e.error||e.message)});
+window.addEventListener('error',e=>{console.error('CircuitAR error',e.error||e.message);debugNote('خطأ JavaScript: '+(e.error?.message||e.message));});
